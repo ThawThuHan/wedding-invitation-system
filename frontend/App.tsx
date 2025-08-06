@@ -4,8 +4,10 @@ import { Toaster } from "@/components/ui/toaster";
 import WeddingList from "./components/WeddingList";
 import WeddingDetail from "./components/WeddingDetail";
 import CreateWedding from "./components/CreateWedding";
+import EditWedding from "./components/EditWedding";
 import GuestManagement from "./components/GuestManagement";
 import RSVPForm from "./components/RSVPForm";
+import WeddingInvitationPage from "./components/WeddingInvitationPage";
 
 const queryClient = new QueryClient();
 
@@ -18,8 +20,10 @@ export default function App() {
             <Route path="/" element={<WeddingList />} />
             <Route path="/create" element={<CreateWedding />} />
             <Route path="/wedding/:id" element={<WeddingDetail />} />
+            <Route path="/wedding/:id/edit" element={<EditWedding />} />
             <Route path="/wedding/:id/guests" element={<GuestManagement />} />
             <Route path="/rsvp/:guestId" element={<RSVPForm />} />
+            <Route path="/invitation/:slug" element={<WeddingInvitationPage />} />
           </Routes>
         </div>
         <Toaster />

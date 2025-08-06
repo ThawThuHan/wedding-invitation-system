@@ -1,27 +1,20 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { weddingDB } from "./db";
 import type { Wedding } from "./types";
 
-export interface CreateWeddingRequest {
-  title: string;
-  brideName: string;
-  groomName: string;
-  weddingDate: Date;
-  venue: string;
-  description?: string;
-  heroPhotoUrl?: string;
-  placeDetails?: string;
+export interface PublishWeddingRequest {
+  id: number;
 }
 
-// Creates a new wedding invitation.
-export const createWedding = api<CreateWeddingRequest, Wedding>(
-  { expose: true, method: "POST", path: "/weddings" },
-  async (req) => {
-    // Generate a unique slug for the webpage
-    const baseSlug = `${req.brideName.toLowerCase().replace(/\s+/g, '-')}-${req.groomName.toLowerCase().replace(/\s+/g, '-')}`;
-    const timestamp = Date.now().toString().slice(-6);
-    const webpageSlug = `${baseSlug}-${timestamp}`;
+export interface PublishWeddingResponse {
+  wedding: Wedding;
+  webpageUrl: string;
+}
 
+// Publishes a wedding webpage.
+export const publishWedding = api<PublishWeddingRequest, PublishWeddingResponse>(
+  { expose: true, method: "POST", path: "/weddings/:id/publish" },
+  async (req) => {
     const row = await weddingDB.queryRow<{
       id: number;
       title: string;
@@ -38,16 +31,17 @@ export const createWedding = api<CreateWeddingRequest, Wedding>(
       created_at: Date;
       updated_at: Date;
     }>`
-      INSERT INTO weddings (title, bride_name, groom_name, wedding_date, venue, description, hero_photo_url, place_details, webpage_slug)
-      VALUES (${req.title}, ${req.brideName}, ${req.groomName}, ${req.weddingDate}, ${req.venue}, ${req.description}, ${req.heroPhotoUrl}, ${req.placeDetails}, ${webpageSlug})
+      UPDATE weddings 
+      SET is_published = true, updated_at = NOW()
+      WHERE id = ${req.id}
       RETURNING *
     `;
 
     if (!row) {
-      throw new Error("Failed to create wedding");
+      throw APIError.notFound("wedding not found");
     }
 
-    return {
+    const wedding: Wedding = {
       id: row.id,
       title: row.title,
       brideName: row.bride_name,
@@ -62,6 +56,13 @@ export const createWedding = api<CreateWeddingRequest, Wedding>(
       webpageSlug: row.webpage_slug || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+    };
+
+    const webpageUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invitation/${row.webpage_slug}`;
+
+    return {
+      wedding,
+      webpageUrl,
     };
   }
 );

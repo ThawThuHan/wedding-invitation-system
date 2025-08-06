@@ -6,8 +6,26 @@ export interface Wedding {
   weddingDate: Date;
   venue: string;
   description?: string;
+  heroPhotoUrl?: string;
+  placeDetails?: string;
+  templateId: string;
+  isPublished: boolean;
+  webpageSlug?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface WeddingPhoto {
+  id: number;
+  weddingId: number;
+  photoUrl: string;
+  caption?: string;
+  displayOrder: number;
+  createdAt: Date;
+}
+
+export interface WeddingWithPhotos extends Wedding {
+  photos: WeddingPhoto[];
 }
 
 export interface Guest {
@@ -34,3 +52,5 @@ export interface RSVP {
 export interface GuestWithRSVP extends Guest {
   rsvp?: RSVP;
 }
+
+export type WeddingTemplate = 'classic' | 'modern' | 'elegant' | 'rustic';

@@ -1,16 +1,27 @@
-import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Heart, Upload, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { ArrowLeft, Heart, Upload, X, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import backend from "~backend/client";
+import type { WeddingTemplate } from "~backend/wedding/types";
 
-export default function CreateWedding() {
+const templates: { id: WeddingTemplate; name: string; description: string }[] = [
+  { id: 'classic', name: 'Classic', description: 'Timeless and elegant design' },
+  { id: 'modern', name: 'Modern', description: 'Clean and contemporary style' },
+  { id: 'elegant', name: 'Elegant', description: 'Sophisticated and luxurious' },
+  { id: 'rustic', name: 'Rustic', description: 'Natural and charming aesthetic' },
+];
+
+export default function EditWedding() {
+  const { id } = useParams<{ id: string }>();
+  const weddingId = parseInt(id!);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -24,42 +35,71 @@ export default function CreateWedding() {
     description: "",
     heroPhotoUrl: "",
     placeDetails: "",
+    templateId: "classic" as WeddingTemplate,
   });
 
   const [galleryPhotos, setGalleryPhotos] = useState<string[]>([]);
   const [newPhotoUrl, setNewPhotoUrl] = useState("");
 
-  const createMutation = useMutation({
+  const { data: weddingData, isLoading } = useQuery({
+    queryKey: ["wedding-with-photos", weddingId],
+    queryFn: () => backend.wedding.getWeddingWithPhotos({ id: weddingId }),
+  });
+
+  useEffect(() => {
+    if (weddingData) {
+      const wedding = weddingData;
+      setFormData({
+        title: wedding.title,
+        brideName: wedding.brideName,
+        groomName: wedding.groomName,
+        weddingDate: new Date(wedding.weddingDate).toISOString().slice(0, 16),
+        venue: wedding.venue,
+        description: wedding.description || "",
+        heroPhotoUrl: wedding.heroPhotoUrl || "",
+        placeDetails: wedding.placeDetails || "",
+        templateId: wedding.templateId as WeddingTemplate,
+      });
+      setGalleryPhotos(wedding.photos.map(p => p.photoUrl));
+    }
+  }, [weddingData]);
+
+  const updateMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const wedding = await backend.wedding.createWedding({
+      const wedding = await backend.wedding.updateWedding({
+        id: weddingId,
         ...data,
         weddingDate: new Date(data.weddingDate),
       });
 
-      // Add gallery photos
-      for (let i = 0; i < galleryPhotos.length; i++) {
+      // For simplicity, we'll just add new photos (in a real app, you'd want to handle updates/deletions)
+      const currentPhotos = weddingData?.photos.map(p => p.photoUrl) || [];
+      const newPhotos = galleryPhotos.filter(url => !currentPhotos.includes(url));
+      
+      for (let i = 0; i < newPhotos.length; i++) {
         await backend.wedding.addWeddingPhoto({
           weddingId: wedding.id,
-          photoUrl: galleryPhotos[i],
-          displayOrder: i,
+          photoUrl: newPhotos[i],
+          displayOrder: currentPhotos.length + i,
         });
       }
 
       return wedding;
     },
     onSuccess: (wedding) => {
-      queryClient.invalidateQueries({ queryKey: ["weddings"] });
+      queryClient.invalidateQueries({ queryKey: ["wedding", weddingId] });
+      queryClient.invalidateQueries({ queryKey: ["wedding-with-photos", weddingId] });
       toast({
-        title: "Wedding created successfully!",
-        description: "Your wedding invitation has been created.",
+        title: "Wedding updated successfully!",
+        description: "Your wedding details have been saved.",
       });
       navigate(`/wedding/${wedding.id}`);
     },
     onError: (error) => {
-      console.error("Error creating wedding:", error);
+      console.error("Error updating wedding:", error);
       toast({
         title: "Error",
-        description: "Failed to create wedding. Please try again.",
+        description: "Failed to update wedding. Please try again.",
         variant: "destructive",
       });
     },
@@ -75,7 +115,7 @@ export default function CreateWedding() {
       });
       return;
     }
-    createMutation.mutate(formData);
+    updateMutation.mutate(formData);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -86,7 +126,7 @@ export default function CreateWedding() {
   };
 
   const addGalleryPhoto = () => {
-    if (newPhotoUrl.trim()) {
+    if (newPhotoUrl.trim() && !galleryPhotos.includes(newPhotoUrl.trim())) {
       setGalleryPhotos(prev => [...prev, newPhotoUrl.trim()]);
       setNewPhotoUrl("");
     }
@@ -96,15 +136,35 @@ export default function CreateWedding() {
     setGalleryPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rose-600"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!weddingData) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center text-red-600">
+          Wedding not found.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="mb-6">
-        <Link to="/" className="inline-flex items-center text-rose-600 hover:text-rose-700 mb-4">
+        <Link to={`/wedding/${weddingId}`} className="inline-flex items-center text-rose-600 hover:text-rose-700 mb-4">
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Weddings
+          Back to Wedding Details
         </Link>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Wedding Invitation</h1>
-        <p className="text-gray-600">Set up your wedding details and start managing your guest list</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Edit Wedding</h1>
+        <p className="text-gray-600">Update your wedding details and customize your invitation</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -205,6 +265,40 @@ export default function CreateWedding() {
 
         <Card>
           <CardHeader>
+            <CardTitle className="flex items-center">
+              <Palette className="w-5 h-5 mr-2 text-rose-600" />
+              Template Selection
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div>
+              <Label>Choose Template</Label>
+              <Select
+                value={formData.templateId}
+                onValueChange={(value: WeddingTemplate) => 
+                  setFormData(prev => ({ ...prev, templateId: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      <div>
+                        <div className="font-medium">{template.name}</div>
+                        <div className="text-sm text-gray-500">{template.description}</div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Hero Photo</CardTitle>
           </CardHeader>
           <CardContent>
@@ -285,12 +379,12 @@ export default function CreateWedding() {
         <div className="flex gap-4 pt-4">
           <Button
             type="submit"
-            disabled={createMutation.isPending}
+            disabled={updateMutation.isPending}
             className="bg-rose-600 hover:bg-rose-700 flex-1"
           >
-            {createMutation.isPending ? "Creating..." : "Create Wedding"}
+            {updateMutation.isPending ? "Saving..." : "Save Changes"}
           </Button>
-          <Link to="/">
+          <Link to={`/wedding/${weddingId}`}>
             <Button type="button" variant="outline">
               Cancel
             </Button>

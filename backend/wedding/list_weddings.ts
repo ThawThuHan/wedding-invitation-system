@@ -18,6 +18,11 @@ export const listWeddings = api<void, ListWeddingsResponse>(
       wedding_date: Date;
       venue: string;
       description: string | null;
+      hero_photo_url: string | null;
+      place_details: string | null;
+      template_id: string;
+      is_published: boolean;
+      webpage_slug: string | null;
       created_at: Date;
       updated_at: Date;
     }>`
@@ -33,6 +38,11 @@ export const listWeddings = api<void, ListWeddingsResponse>(
       weddingDate: row.wedding_date,
       venue: row.venue,
       description: row.description || undefined,
+      heroPhotoUrl: row.hero_photo_url || undefined,
+      placeDetails: row.place_details || undefined,
+      templateId: row.template_id,
+      isPublished: row.is_published,
+      webpageSlug: row.webpage_slug || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));

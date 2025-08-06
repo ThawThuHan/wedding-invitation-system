@@ -1,14 +1,17 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Calendar, MapPin, Users, BarChart3, Edit } from "lucide-react";
+import { ArrowLeft, Calendar, MapPin, Users, BarChart3, Edit, Globe, Share2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/use-toast";
 import backend from "~backend/client";
 
 export default function WeddingDetail() {
   const { id } = useParams<{ id: string }>();
   const weddingId = parseInt(id!);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: wedding, isLoading: weddingLoading } = useQuery({
     queryKey: ["wedding", weddingId],
@@ -19,6 +22,45 @@ export default function WeddingDetail() {
     queryKey: ["rsvp-stats", weddingId],
     queryFn: () => backend.wedding.getRSVPStats({ weddingId }),
   });
+
+  const publishMutation = useMutation({
+    mutationFn: () => backend.wedding.publishWedding({ id: weddingId }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["wedding", weddingId] });
+      toast({
+        title: "Wedding published!",
+        description: "Your wedding invitation is now live and ready to share.",
+      });
+      
+      // Copy URL to clipboard
+      navigator.clipboard.writeText(data.webpageUrl).then(() => {
+        toast({
+          title: "URL copied!",
+          description: "The wedding invitation URL has been copied to your clipboard.",
+        });
+      });
+    },
+    onError: (error) => {
+      console.error("Error publishing wedding:", error);
+      toast({
+        title: "Error",
+        description: "Failed to publish wedding. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const copyInvitationUrl = () => {
+    if (wedding?.webpageSlug) {
+      const url = `${window.location.origin}/invitation/${wedding.webpageSlug}`;
+      navigator.clipboard.writeText(url).then(() => {
+        toast({
+          title: "URL copied!",
+          description: "The wedding invitation URL has been copied to your clipboard.",
+        });
+      });
+    }
+  };
 
   if (weddingLoading) {
     return (
@@ -41,6 +83,7 @@ export default function WeddingDetail() {
   }
 
   const stats = statsData?.stats;
+  const invitationUrl = wedding.webpageSlug ? `${window.location.origin}/invitation/${wedding.webpageSlug}` : null;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -55,8 +98,22 @@ export default function WeddingDetail() {
             <p className="text-xl text-rose-600 font-medium">
               {wedding.brideName} & {wedding.groomName}
             </p>
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant={wedding.isPublished ? "default" : "secondary"}>
+                {wedding.isPublished ? "Published" : "Draft"}
+              </Badge>
+              <Badge variant="outline" className="capitalize">
+                {wedding.templateId} Template
+              </Badge>
+            </div>
           </div>
           <div className="flex gap-2">
+            <Link to={`/wedding/${weddingId}/edit`}>
+              <Button variant="outline">
+                <Edit className="w-4 h-4 mr-2" />
+                Edit
+              </Button>
+            </Link>
             <Link to={`/wedding/${weddingId}/guests`}>
               <Button className="bg-rose-600 hover:bg-rose-700">
                 <Users className="w-4 h-4 mr-2" />
@@ -99,6 +156,9 @@ export default function WeddingDetail() {
                 <div>
                   <p className="font-medium">Venue</p>
                   <p className="text-gray-600">{wedding.venue}</p>
+                  {wedding.placeDetails && (
+                    <p className="text-gray-500 text-sm mt-1">{wedding.placeDetails}</p>
+                  )}
                 </div>
               </div>
               {wedding.description && (
@@ -107,11 +167,76 @@ export default function WeddingDetail() {
                   <p className="text-gray-600">{wedding.description}</p>
                 </div>
               )}
+              {wedding.heroPhotoUrl && (
+                <div>
+                  <p className="font-medium mb-2">Hero Photo</p>
+                  <img
+                    src={wedding.heroPhotoUrl}
+                    alt="Wedding hero"
+                    className="w-full h-48 object-cover rounded-lg"
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Globe className="w-5 h-5 mr-2" />
+                Wedding Invitation
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {wedding.isPublished ? (
+                <>
+                  <div className="text-center">
+                    <div className="w-12 h-12 mx-auto mb-3 bg-green-100 rounded-full flex items-center justify-center">
+                      <Globe className="w-6 h-6 text-green-600" />
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Your wedding invitation is live!
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {invitationUrl && (
+                      <Link to={`/invitation/${wedding.webpageSlug}`} target="_blank">
+                        <Button variant="outline" className="w-full">
+                          <Eye className="w-4 h-4 mr-2" />
+                          Preview Invitation
+                        </Button>
+                      </Link>
+                    )}
+                    <Button onClick={copyInvitationUrl} className="w-full">
+                      <Share2 className="w-4 h-4 mr-2" />
+                      Copy Invitation URL
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-center">
+                    <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
+                      <Globe className="w-6 h-6 text-gray-400" />
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Publish your wedding invitation to share with guests
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => publishMutation.mutate()}
+                    disabled={publishMutation.isPending}
+                    className="w-full bg-rose-600 hover:bg-rose-700"
+                  >
+                    {publishMutation.isPending ? "Publishing..." : "Publish Invitation"}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
